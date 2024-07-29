@@ -1,22 +1,18 @@
 [package]
 authors = ["Douglas Yau <dy@coradoya.com>"]
-build = "build.rs"
 description = "Bindings for charls"
 edition = "2021"
 keywords = ["charls", "libcharls", "image", "jpegls"]
-homepage = "https://github.com/coradoya/charls-sys"
-repository = "https://github.com/coradoya/charls-sys"
+homepage = "https://github.com/coradoya/charls-rs"
+repository = "https://github.com/coradoya/charls-rs"
 license = "MIT"
-links = "charls"
-name = "charls-sys"
+name = "charls-rs"
 readme = "README.md"
-version = "0.1.3"
+version = "0.2.0"
 
 [dependencies]
-
-[build-dependencies]
-cmake = "0.1"
+charls-sys = "2.4.2"
 
 [features]
 default = []
-static = []
+static = ["charls-sys/static"]

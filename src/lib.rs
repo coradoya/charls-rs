@@ -1,11 +1,6 @@
-#![allow(non_upper_case_globals)]
-#![allow(non_camel_case_types)]
-#![allow(non_snake_case)]
-
 use std::error::Error;
 use std::ffi::CStr;
-// include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
-include!("charls.rs");
+use charls_sys::*;
 
 pub type CharlsResult<T> = Result<T, Box<dyn Error>>;
 
