@@ -6,7 +6,7 @@ keywords = ["charls", "libcharls", "image", "jpegls"]
 homepage = "https://github.com/coradoya/charls-rs"
 repository = "https://github.com/coradoya/charls-rs"
 license = "MIT"
-name = "charls-rs"
+name = "charls"
 readme = "README.md"
 version = "0.2.0"
 
