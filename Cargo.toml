@@ -1,9 +1,8 @@
 [package]
 authors = ["Douglas Yau <dy@coradoya.com>"]
-description = "Bindings for charls"
+description = "Bindings for CharLS, the JPEG-LS implementation"
 edition = "2021"
 keywords = ["charls", "libcharls", "image", "jpegls"]
-homepage = "https://github.com/coradoya/charls-rs"
 repository = "https://github.com/coradoya/charls-rs"
 license = "MIT"
 name = "charls"
