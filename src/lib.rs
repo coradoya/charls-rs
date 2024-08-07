@@ -3,28 +3,25 @@ use std::ffi::CStr;
 use charls_sys::*;
 
 pub type CharlsResult<T> = Result<T, Box<dyn Error>>;
+pub type CharlsEncoder = *mut charls_jpegls_encoder;
+pub type CharlsDecoder = *mut charls_jpegls_decoder;
 
 #[derive(Default)]
 pub struct CharLS {
-    encoder: Option<*mut charls_jpegls_encoder>,
-    decoder: Option<*mut charls_jpegls_decoder>,
+    encoder: Option<CharlsEncoder>,
+    decoder: Option<CharlsDecoder>,
+}
+
+#[derive(Default)]
+pub struct FrameInfo {
+    width: u32,
+    height: u32,
+    bits_per_sample: i32,
+    component_count: i32,
 }
 
 impl CharLS {
-    fn translate_error(&self, code: i32) -> CharlsResult<()> {
-        if code != 0 {
-            let message = unsafe {
-                let msg = charls_get_error_message(code);
-                CStr::from_ptr(msg)
-            };
-            let message = message.to_str().unwrap();
-            return Err(message.into());
-        }
-
-        Ok(())
-    }
-
-    pub fn decode(&mut self, src: &[u8], stride: u32) -> CharlsResult<Vec<u8>> {
+    pub fn decode_with_stride(&mut self, src: &[u8], dst: &mut Vec<u8>, stride: u32) -> CharlsResult<FrameInfo> {
         let decoder = self.decoder.unwrap_or_else(|| {
             self.decoder = Some(unsafe { charls_jpegls_decoder_create() });
             self.decoder.unwrap()
@@ -38,11 +35,22 @@ impl CharLS {
             charls_jpegls_decoder_set_source_buffer(decoder, src.as_ptr() as _, src.len())
         };
 
-        self.translate_error(err)?;
+        translate_error(err)?;
 
         let err = unsafe { charls_jpegls_decoder_read_header(decoder) };
 
-        self.translate_error(err)?;
+        translate_error(err)?;
+
+        let mut frame_info = charls_frame_info {
+            width: 0,
+            height: 0,
+            bits_per_sample: 0,
+            component_count: 0,
+        };
+        let err = unsafe {
+            charls_jpegls_decoder_get_frame_info(decoder, &mut frame_info)
+        };
+        translate_error(err)?;
 
         let size = unsafe {
             let mut computed_size: usize = 0;
@@ -58,7 +66,7 @@ impl CharLS {
 
         match size {
             Some(size) => {
-                let mut dst = vec![0; size];
+                dst.resize(size, 0);
                 let err = unsafe {
                     charls_jpegls_decoder_decode_to_buffer(
                         decoder,
@@ -69,7 +77,12 @@ impl CharLS {
                 };
 
                 if err == 0 {
-                    Ok(dst)
+                    Ok(FrameInfo {
+                        width: frame_info.width,
+                        height: frame_info.height,
+                        bits_per_sample: frame_info.bits_per_sample,
+                        component_count: frame_info.component_count
+                    })
                 } else {
                     let message = unsafe {
                         let msg = charls_get_error_message(err);
@@ -83,15 +96,17 @@ impl CharLS {
         }
     }
 
+    pub fn decode(&mut self, src: &[u8], dst: &mut Vec<u8>) -> CharlsResult<FrameInfo> {
+        self.decode_with_stride(src, dst, 0)
+    }
+
     pub fn encode(
         &mut self,
-        width: u32,
-        height: u32,
-        bits_per_sample: i32,
-        component_count: i32,
+        frame_info: FrameInfo,
         near: i32,
         src: &[u8],
-    ) -> CharlsResult<Vec<u8>> {
+        dst: &mut Vec<u8>
+    ) -> CharlsResult<()> {
         let encoder = self.encoder.unwrap_or_else(|| {
             self.encoder = Some(unsafe { charls_jpegls_encoder_create() });
             self.encoder.unwrap()
@@ -102,38 +117,38 @@ impl CharLS {
         }
 
         let frame_info = charls_frame_info {
-            width,
-            height,
-            bits_per_sample,
-            component_count,
+            width: frame_info.width,
+            height: frame_info.height,
+            bits_per_sample: frame_info.bits_per_sample,
+            component_count: frame_info.component_count,
         };
 
         let err = unsafe {
             charls_jpegls_encoder_set_frame_info(encoder, &frame_info as *const charls_frame_info)
         };
 
-        self.translate_error(err)?;
+        translate_error(err)?;
 
         let mut size = 0;
         let err =
             unsafe { charls_jpegls_encoder_get_estimated_destination_size(encoder, &mut size) };
 
-        self.translate_error(err)?;
+        translate_error(err)?;
 
-        let mut buffer: Vec<u8> = vec![0; size];
+        dst.resize(size, 0);
         let err = unsafe {
             charls_jpegls_encoder_set_destination_buffer(
                 encoder,
-                buffer.as_mut_ptr() as *mut std::os::raw::c_void,
+                dst.as_mut_ptr() as *mut std::os::raw::c_void,
                 size,
             )
         };
 
-        self.translate_error(err)?;
+        translate_error(err)?;
 
         let err = unsafe { charls_jpegls_encoder_set_near_lossless(encoder, near) };
 
-        self.translate_error(err)?;
+        translate_error(err)?;
 
         let mut data = src.to_vec();
         let err = unsafe {
@@ -145,14 +160,51 @@ impl CharLS {
             )
         };
 
-        self.translate_error(err)?;
+        translate_error(err)?;
 
         let err = unsafe { charls_jpegls_encoder_get_bytes_written(encoder, &mut size) };
 
-        self.translate_error(err)?;
+        translate_error(err)?;
 
-        buffer.truncate(size);
-        Ok(buffer)
+        dst.truncate(size);
+        Ok(())
+    }
+
+    pub fn get_frame_info(&mut self, src: &[u8]) -> CharlsResult<FrameInfo>{
+        let decoder = self.decoder.unwrap_or_else(|| {
+            self.decoder = Some(unsafe { charls_jpegls_decoder_create() });
+            self.decoder.unwrap()
+        });
+
+        if decoder.is_null() {
+            return Err("Unable to start the codec".into());
+        }
+
+        let err = unsafe {
+            charls_jpegls_decoder_set_source_buffer(decoder, src.as_ptr() as _, src.len())
+        };
+        translate_error(err)?;
+
+        let err = unsafe { charls_jpegls_decoder_read_header(decoder) };
+        translate_error(err)?;
+
+        let mut frame_info = charls_frame_info {
+            width: 0,
+            height: 0,
+            bits_per_sample: 0,
+            component_count: 0,
+        };
+        let err = unsafe {
+            charls_jpegls_decoder_get_frame_info(decoder, &mut frame_info)
+        };
+        translate_error(err)?;
+
+        Ok(FrameInfo {
+            width: frame_info.width,
+            height: frame_info.height,
+            bits_per_sample: frame_info.bits_per_sample,
+            component_count: frame_info.component_count
+        })
     }
 }
 
@@ -170,4 +222,17 @@ impl Drop for CharLS {
             }
         }
     }
+}
+
+fn translate_error(code: i32) -> CharlsResult<()> {
+    if code != 0 {
+        let message = unsafe {
+            let msg = charls_get_error_message(code);
+            CStr::from_ptr(msg)
+        };
+        let message = message.to_str().unwrap();
+        return Err(message.into());
+    }
+
+    Ok(())
 }
