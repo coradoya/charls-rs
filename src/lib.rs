@@ -14,10 +14,10 @@ pub struct CharLS {
 
 #[derive(Default)]
 pub struct FrameInfo {
-    width: u32,
-    height: u32,
-    bits_per_sample: i32,
-    component_count: i32,
+    pub width: u32,
+    pub height: u32,
+    pub bits_per_sample: i32,
+    pub component_count: i32,
 }
 
 impl CharLS {
