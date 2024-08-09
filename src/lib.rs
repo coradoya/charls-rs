@@ -21,7 +21,7 @@ pub struct FrameInfo {
 }
 
 impl CharLS {
-    pub fn decode_with_stride(&mut self, src: &[u8], dst: &mut Vec<u8>, stride: u32) -> CharlsResult<FrameInfo> {
+    pub fn decode_with_stride(&mut self, src: &[u8], dst: &mut Vec<u8>, stride: u32) -> CharlsResult<()> {
         let decoder = self.decoder.unwrap_or_else(|| {
             self.decoder = Some(unsafe { charls_jpegls_decoder_create() });
             self.decoder.unwrap()
@@ -39,17 +39,6 @@ impl CharLS {
 
         let err = unsafe { charls_jpegls_decoder_read_header(decoder) };
 
-        translate_error(err)?;
-
-        let mut frame_info = charls_frame_info {
-            width: 0,
-            height: 0,
-            bits_per_sample: 0,
-            component_count: 0,
-        };
-        let err = unsafe {
-            charls_jpegls_decoder_get_frame_info(decoder, &mut frame_info)
-        };
         translate_error(err)?;
 
         let size = unsafe {
@@ -77,12 +66,7 @@ impl CharLS {
                 };
 
                 if err == 0 {
-                    Ok(FrameInfo {
-                        width: frame_info.width,
-                        height: frame_info.height,
-                        bits_per_sample: frame_info.bits_per_sample,
-                        component_count: frame_info.component_count
-                    })
+                    Ok(())
                 } else {
                     let message = unsafe {
                         let msg = charls_get_error_message(err);
@@ -96,7 +80,7 @@ impl CharLS {
         }
     }
 
-    pub fn decode(&mut self, src: &[u8], dst: &mut Vec<u8>) -> CharlsResult<FrameInfo> {
+    pub fn decode(&mut self, src: &[u8], dst: &mut Vec<u8>) -> CharlsResult<()> {
         self.decode_with_stride(src, dst, 0)
     }
 
