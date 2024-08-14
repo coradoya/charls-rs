@@ -1,11 +1,35 @@
+//! Rust bindings for [CharLS](https://github.com/team-charls/charls),
+//! the implementation of the JPEG-LS standard
+//! for lossless and near-lossless image compression and decompression.
+//!
+//! # Cargo features
+//!
+//! - `static`: statically link CharLS.
+//!   If this is not enabled,
+//!   you need to install the CarLS (e.g. `libcharls.so`) into your system
+//!   or add it to your library path (`LD_LIBRARY_PATH`).
+//!
+//! # Example
+//!
+//! ```no_run
+//! use charls::CharLS;
+//!
+//! // Read a JPEG-LS file
+//! let data = std::fs::read("test.jls")?;
+//! let mut charls = CharLS::default();
+//! let decoded = charls.decode(&data, 0)?;
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+
+use charls_sys::*;
 use std::error::Error;
 use std::ffi::CStr;
-use charls_sys::*;
 
 pub type CharlsResult<T> = Result<T, Box<dyn Error>>;
 pub type CharlsEncoder = *mut charls_jpegls_encoder;
 pub type CharlsDecoder = *mut charls_jpegls_decoder;
 
+/// CharLS codec instance
 #[derive(Default)]
 pub struct CharLS {
     encoder: Option<CharlsEncoder>,
