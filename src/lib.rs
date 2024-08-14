@@ -6,7 +6,7 @@
 //!
 //! - `static`: statically link CharLS.
 //!   If this is not enabled,
-//!   you need to install the CarLS (e.g. `libcharls.so`) into your system
+//!   you need to install the CharLS (e.g. `libcharls.so`) into your system
 //!   or add it to your library path (`LD_LIBRARY_PATH`).
 //!
 //! # Example
@@ -17,7 +17,7 @@
 //! // Read a JPEG-LS file
 //! let data = std::fs::read("test.jls")?;
 //! let mut charls = CharLS::default();
-//! let decoded = charls.decode(&data, 0)?;
+//! let decoded = charls.decode(&data)?;
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
@@ -45,7 +45,7 @@ pub struct FrameInfo {
 }
 
 impl CharLS {
-    pub fn decode_with_stride(&mut self, src: &[u8], dst: &mut Vec<u8>, stride: u32) -> CharlsResult<()> {
+    pub fn decode_with_stride(&mut self, src: &[u8], stride: u32) -> CharlsResult<Vec<u8>> {
         let decoder = self.decoder.unwrap_or_else(|| {
             self.decoder = Some(unsafe { charls_jpegls_decoder_create() });
             self.decoder.unwrap()
@@ -79,7 +79,7 @@ impl CharLS {
 
         match size {
             Some(size) => {
-                dst.resize(size, 0);
+                let mut dst = vec![0; size];
                 let err = unsafe {
                     charls_jpegls_decoder_decode_to_buffer(
                         decoder,
@@ -90,7 +90,7 @@ impl CharLS {
                 };
 
                 if err == 0 {
-                    Ok(())
+                    Ok(dst)
                 } else {
                     let message = unsafe {
                         let msg = charls_get_error_message(err);
@@ -104,8 +104,8 @@ impl CharLS {
         }
     }
 
-    pub fn decode(&mut self, src: &[u8], dst: &mut Vec<u8>) -> CharlsResult<()> {
-        self.decode_with_stride(src, dst, 0)
+    pub fn decode(&mut self, src: &[u8]) -> CharlsResult<Vec<u8>> {
+        self.decode_with_stride(src, 0)
     }
 
     pub fn encode(
@@ -113,8 +113,7 @@ impl CharLS {
         frame_info: FrameInfo,
         near: i32,
         src: &[u8],
-        dst: &mut Vec<u8>
-    ) -> CharlsResult<()> {
+    ) -> CharlsResult<Vec<u8>> {
         let encoder = self.encoder.unwrap_or_else(|| {
             self.encoder = Some(unsafe { charls_jpegls_encoder_create() });
             self.encoder.unwrap()
@@ -143,7 +142,7 @@ impl CharLS {
 
         translate_error(err)?;
 
-        dst.resize(size, 0);
+        let mut dst = vec![0; size];
         let err = unsafe {
             charls_jpegls_encoder_set_destination_buffer(
                 encoder,
@@ -175,7 +174,7 @@ impl CharLS {
         translate_error(err)?;
 
         dst.truncate(size);
-        Ok(())
+        Ok(dst)
     }
 
     pub fn get_frame_info(&mut self, src: &[u8]) -> CharlsResult<FrameInfo>{
