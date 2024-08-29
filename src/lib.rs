@@ -22,12 +22,44 @@
 //! ```
 
 use charls_sys::*;
-use std::error::Error;
 use std::ffi::CStr;
 
-pub type CharlsResult<T> = Result<T, Box<dyn Error>>;
+pub type CharlsResult<T> = Result<T, Error>;
 pub type CharlsEncoder = *mut charls_jpegls_encoder;
 pub type CharlsDecoder = *mut charls_jpegls_decoder;
+
+/// Error type for all high-level CharLS operations
+#[derive(Debug, Copy, Clone, PartialEq)]
+#[non_exhaustive]
+pub enum Error {
+    /// Unable to start the codec
+    InitCodec,
+    /// Unable to compute decompressed size
+    ComputeSize,
+    /// CharLS error
+    JpegLsError {
+        /// the native error code from CharLS
+        code: charls_sys::charls_jpegls_errc
+    },
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Error::InitCodec => write!(f, "Unable to start the codec"),
+            Error::ComputeSize => write!(f, "Unable to compute decompressed size"),
+            Error::JpegLsError { code } => {
+                let message = unsafe {
+                    let msg = charls_get_error_message(*code as i32);
+                    CStr::from_ptr(msg)
+                };
+                write!(f, "{}", message.to_string_lossy())
+            }
+        }
+    }
+}
+
+impl std::error::Error for Error {}
 
 /// CharLS codec instance
 #[derive(Default)]
@@ -52,7 +84,7 @@ impl CharLS {
         });
 
         if decoder.is_null() {
-            return Err("Unable to start the codec".into());
+            return Err(Error::InitCodec);
         }
 
         let err = unsafe {
@@ -89,18 +121,10 @@ impl CharLS {
                     )
                 };
 
-                if err == 0 {
-                    Ok(dst)
-                } else {
-                    let message = unsafe {
-                        let msg = charls_get_error_message(err);
-                        CStr::from_ptr(msg)
-                    };
-                    let message = message.to_str().unwrap();
-                    Err(message.into())
-                }
+                translate_error(err)?;
+                Ok(dst)
             }
-            None => Err("Unable to compute decompressed size".into()),
+            None => Err(Error::ComputeSize),
         }
     }
 
@@ -120,7 +144,7 @@ impl CharLS {
         });
 
         if encoder.is_null() {
-            return Err("Unable to start the codec".into());
+            return Err(Error::InitCodec);
         }
 
         let frame_info = charls_frame_info {
@@ -184,7 +208,7 @@ impl CharLS {
         });
 
         if decoder.is_null() {
-            return Err("Unable to start the codec".into());
+            return Err(Error::InitCodec);
         }
 
         let err = unsafe {
@@ -233,12 +257,7 @@ impl Drop for CharLS {
 
 fn translate_error(code: i32) -> CharlsResult<()> {
     if code != 0 {
-        let message = unsafe {
-            let msg = charls_get_error_message(code);
-            CStr::from_ptr(msg)
-        };
-        let message = message.to_str().unwrap();
-        return Err(message.into());
+        return Err(Error::JpegLsError { code });
     }
 
     Ok(())
