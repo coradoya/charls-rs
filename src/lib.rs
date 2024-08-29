@@ -39,7 +39,7 @@ pub enum Error {
     /// CharLS error
     JpegLsError {
         /// the native error code from CharLS
-        code: charls_sys::charls_jpegls_errc
+        code: charls_jpegls_errc
     },
 }
 
@@ -50,7 +50,7 @@ impl std::fmt::Display for Error {
             Error::ComputeSize => write!(f, "Unable to compute decompressed size"),
             Error::JpegLsError { code } => {
                 let message = unsafe {
-                    let msg = charls_get_error_message(*code as i32);
+                    let msg = charls_get_error_message(*code);
                     CStr::from_ptr(msg)
                 };
                 write!(f, "{}", message.to_string_lossy())
