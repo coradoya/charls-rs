@@ -68,7 +68,7 @@ pub struct CharLS {
     decoder: Option<CharlsDecoder>,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct FrameInfo {
     pub width: u32,
     pub height: u32,
