@@ -81,7 +81,7 @@ pub struct FrameInfo {
 ///
 /// Defines how color components are arranged in memory for both native and encoded formats.
 /// See more: https://github.com/team-charls/charls/wiki/How-to-use-the-API#multi-component-image-typical-rgb-color
-#[derive(Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum InterleaveMode {
     /// No interleave mode.
     ///
