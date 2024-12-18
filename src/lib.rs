@@ -284,9 +284,7 @@ impl CharLS {
             charls_jpegls_encoder_set_interleave_mode(encoder, interleave_mode)
         };
 
-        translate_error(err)?;
-
-        Ok(())
+        translate_error(err)
     }
 }
 
