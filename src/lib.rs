@@ -76,6 +76,31 @@ pub struct FrameInfo {
     pub component_count: i32,
 }
 
+
+/// Interleave modes for encoding/decoding.
+///
+/// Defines how color components are arranged in memory for both native and encoded formats.
+/// See more: https://github.com/team-charls/charls/wiki/How-to-use-the-API#multi-component-image-typical-rgb-color
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum InterleaveMode {
+    /// No interleave mode.
+    ///
+    /// *Native Format:* by plane: `RRRRGGGGBBBB`
+    /// *Encoded Format:* scan 1: `rrr`, scan 2: `ggg`, scan 3: `bbb`
+    #[default]
+    None,
+    /// Line interleave mode.
+    ///
+    /// *Native Format:* by pixel: `RGBRGBRGBRGB`
+    /// *Encoded Format:* scan 1: `rrrgggbbb`
+    Line,
+    /// Sample interleave mode.
+    ///
+    /// *Native Format:* by pixel: `RGBRGBRGBRGB`
+    /// *Encoded Format:* scan 1: `rgbrgbrgb`
+    Sample,
+}
+
 impl CharLS {
     pub fn decode_with_stride(&mut self, src: &[u8], stride: u32) -> CharlsResult<Vec<u8>> {
         let decoder = self.decoder.unwrap_or_else(|| {
@@ -236,6 +261,30 @@ impl CharLS {
             bits_per_sample: frame_info.bits_per_sample,
             component_count: frame_info.component_count
         })
+    }
+
+    /// Sets the interleave mode for the encoder.
+    pub fn set_interleave_mode(&mut self, interleave_mode: InterleaveMode) -> CharlsResult<()> {
+        let encoder = self.encoder.unwrap_or_else(|| {
+            self.encoder = Some(unsafe { charls_jpegls_encoder_create() });
+            self.encoder.unwrap()
+        });
+
+        if encoder.is_null() {
+            return Err(Error::InitCodec);
+        }
+
+        let interleave_mode = match interleave_mode {
+            InterleaveMode::None => charls_interleave_mode_none,
+            InterleaveMode::Line => charls_interleave_mode_line,
+            InterleaveMode::Sample => charls_interleave_mode_sample
+        };
+
+        let err = unsafe {
+            charls_jpegls_encoder_set_interleave_mode(encoder, interleave_mode)
+        };
+
+        translate_error(err)
     }
 }
 
