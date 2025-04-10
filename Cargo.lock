@@ -13,16 +13,16 @@ dependencies = [
 
 [[package]]
 name = "charls"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "charls-sys",
 ]
 
 [[package]]
 name = "charls-sys"
-version = "2.4.2"
+version = "2.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "63d9445022ff0c7b9016e7035bb5291bdbf6eacc993b25d1378844c0f0a7c82f"
+checksum = "cc9eeac183226ca6b6d7fb2c02df2f2ce22c40f2d18ba0bf84f7c8ce80f66d60"
 dependencies = [
  "cmake",
 ]

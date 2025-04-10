@@ -7,10 +7,10 @@ repository = "https://github.com/coradoya/charls-rs"
 license = "MIT"
 name = "charls"
 readme = "README.md"
-version = "0.4.0"
+version = "0.4.1"
 
 [dependencies]
-charls-sys = "2.4.2"
+charls-sys = "2.4.3"
 
 [features]
 default = []
