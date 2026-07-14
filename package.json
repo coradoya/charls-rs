@@ -1,0 +1,8 @@
+{
+  "name": "charls",
+  "version": "0.4.2",
+  "description": "npm dependencies of the wasm32 backend, declared for wasm-bindgen --target bundler",
+  "dependencies": {
+    "@team-charls/charls-wasm": "^0.10.0"
+  }
+}
