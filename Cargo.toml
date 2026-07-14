@@ -7,7 +7,7 @@ repository = "https://github.com/coradoya/charls-rs"
 license = "MIT"
 name = "charls"
 readme = "README.md"
-version = "0.4.2"
+version = "0.4.3"
 
 [dependencies]
 
