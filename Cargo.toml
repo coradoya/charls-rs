@@ -14,7 +14,7 @@ version = "0.4.3"
 # The CharLS C library. It builds with CMake and has no wasm toolchain, so the
 # browser gets the codec the CharLS authors already ship for it instead.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-charls-sys = "2.4.4"
+charls-sys = "2.4.5"
 
 # @team-charls/charls-wasm, reached through wasm-bindgen. The module instantiates
 # asynchronously, so `charls::init()` is awaited once before the first decode;
