@@ -1,6 +1,7 @@
 //! The CharLS C library via `charls-sys`. Native only (builds with CMake).
 
 use std::ffi::CStr;
+use std::ptr::NonNull;
 
 use charls_sys::*;
 
@@ -17,43 +18,65 @@ pub fn error_message(code: crate::CharlsErrc) -> String {
     message.to_string_lossy().into_owned()
 }
 
+/// CharLS encoders and decoders are single-use: after one stream they reject
+/// further calls with `InvalidOperation`, and the 2.4 C API has no reset. So a
+/// fresh handle is created for every operation; only the settings live here.
 #[derive(Default)]
 pub struct Codec {
-    encoder: Option<CharlsEncoder>,
-    decoder: Option<CharlsDecoder>,
+    interleave_mode: InterleaveMode,
+}
+
+/// Owns a `charls_jpegls_decoder` and destroys it on drop.
+struct Decoder(NonNull<charls_jpegls_decoder>);
+
+impl Decoder {
+    fn new() -> CharlsResult<Self> {
+        NonNull::new(unsafe { charls_jpegls_decoder_create() }).map(Self).ok_or(Error::InitCodec)
+    }
+
+    fn as_ptr(&self) -> CharlsDecoder {
+        self.0.as_ptr()
+    }
+
+    /// Points the decoder at `src` and parses the JPEG-LS header.
+    fn read_header(&self, src: &[u8]) -> CharlsResult<()> {
+        let err = unsafe { charls_jpegls_decoder_set_source_buffer(self.as_ptr(), src.as_ptr() as _, src.len()) };
+        translate_error(err)?;
+        let err = unsafe { charls_jpegls_decoder_read_header(self.as_ptr()) };
+        translate_error(err)
+    }
+}
+
+impl Drop for Decoder {
+    fn drop(&mut self) {
+        unsafe { charls_jpegls_decoder_destroy(self.as_ptr()) };
+    }
+}
+
+/// Owns a `charls_jpegls_encoder` and destroys it on drop.
+struct Encoder(NonNull<charls_jpegls_encoder>);
+
+impl Encoder {
+    fn new() -> CharlsResult<Self> {
+        NonNull::new(unsafe { charls_jpegls_encoder_create() }).map(Self).ok_or(Error::InitCodec)
+    }
+
+    fn as_ptr(&self) -> CharlsEncoder {
+        self.0.as_ptr()
+    }
+}
+
+impl Drop for Encoder {
+    fn drop(&mut self) {
+        unsafe { charls_jpegls_encoder_destroy(self.as_ptr()) };
+    }
 }
 
 impl Codec {
-    fn decoder(&mut self) -> CharlsResult<CharlsDecoder> {
-        let decoder = self.decoder.unwrap_or_else(|| {
-            self.decoder = Some(unsafe { charls_jpegls_decoder_create() });
-            self.decoder.unwrap()
-        });
-        if decoder.is_null() {
-            return Err(Error::InitCodec);
-        }
-        Ok(decoder)
-    }
-
-    fn encoder(&mut self) -> CharlsResult<CharlsEncoder> {
-        let encoder = self.encoder.unwrap_or_else(|| {
-            self.encoder = Some(unsafe { charls_jpegls_encoder_create() });
-            self.encoder.unwrap()
-        });
-        if encoder.is_null() {
-            return Err(Error::InitCodec);
-        }
-        Ok(encoder)
-    }
-
     pub fn decode_with_stride(&mut self, src: &[u8], stride: u32) -> CharlsResult<Vec<u8>> {
-        let decoder = self.decoder()?;
-
-        let err = unsafe { charls_jpegls_decoder_set_source_buffer(decoder, src.as_ptr() as _, src.len()) };
-        translate_error(err)?;
-
-        let err = unsafe { charls_jpegls_decoder_read_header(decoder) };
-        translate_error(err)?;
+        let guard = Decoder::new()?;
+        guard.read_header(src)?;
+        let decoder = guard.as_ptr();
 
         let size = unsafe {
             let mut computed_size: usize = 0;
@@ -73,7 +96,8 @@ impl Codec {
     }
 
     pub fn encode(&mut self, frame_info: FrameInfo, near: i32, src: &[u8]) -> CharlsResult<Vec<u8>> {
-        let encoder = self.encoder()?;
+        let guard = Encoder::new()?;
+        let encoder = guard.as_ptr();
 
         let frame_info = charls_frame_info {
             width: frame_info.width,
@@ -98,6 +122,14 @@ impl Codec {
         let err = unsafe { charls_jpegls_encoder_set_near_lossless(encoder, near) };
         translate_error(err)?;
 
+        let interleave_mode = match self.interleave_mode {
+            InterleaveMode::None => charls_interleave_mode_none,
+            InterleaveMode::Line => charls_interleave_mode_line,
+            InterleaveMode::Sample => charls_interleave_mode_sample,
+        };
+        let err = unsafe { charls_jpegls_encoder_set_interleave_mode(encoder, interleave_mode) };
+        translate_error(err)?;
+
         let mut data = src.to_vec();
         let err = unsafe {
             charls_jpegls_encoder_encode_from_buffer(encoder, data.as_mut_ptr() as *mut std::os::raw::c_void, data.len(), 0)
@@ -112,13 +144,8 @@ impl Codec {
     }
 
     pub fn frame_info(&mut self, src: &[u8]) -> CharlsResult<FrameInfo> {
-        let decoder = self.decoder()?;
-
-        let err = unsafe { charls_jpegls_decoder_set_source_buffer(decoder, src.as_ptr() as _, src.len()) };
-        translate_error(err)?;
-
-        let err = unsafe { charls_jpegls_decoder_read_header(decoder) };
-        translate_error(err)?;
+        let decoder = Decoder::new()?;
+        decoder.read_header(src)?;
 
         let mut frame_info = charls_frame_info {
             width: 0,
@@ -126,7 +153,7 @@ impl Codec {
             bits_per_sample: 0,
             component_count: 0,
         };
-        let err = unsafe { charls_jpegls_decoder_get_frame_info(decoder, &mut frame_info) };
+        let err = unsafe { charls_jpegls_decoder_get_frame_info(decoder.as_ptr(), &mut frame_info) };
         translate_error(err)?;
 
         Ok(FrameInfo {
@@ -137,32 +164,10 @@ impl Codec {
         })
     }
 
+    /// Applies to every later `encode`.
     pub fn set_interleave_mode(&mut self, interleave_mode: InterleaveMode) -> CharlsResult<()> {
-        let encoder = self.encoder()?;
-
-        let interleave_mode = match interleave_mode {
-            InterleaveMode::None => charls_interleave_mode_none,
-            InterleaveMode::Line => charls_interleave_mode_line,
-            InterleaveMode::Sample => charls_interleave_mode_sample,
-        };
-
-        let err = unsafe { charls_jpegls_encoder_set_interleave_mode(encoder, interleave_mode) };
-        translate_error(err)
-    }
-}
-
-impl Drop for Codec {
-    fn drop(&mut self) {
-        if let Some(decoder) = self.decoder {
-            unsafe {
-                charls_jpegls_decoder_destroy(decoder);
-            }
-        }
-        if let Some(encoder) = self.encoder {
-            unsafe {
-                charls_jpegls_encoder_destroy(encoder);
-            }
-        }
+        self.interleave_mode = interleave_mode;
+        Ok(())
     }
 }
 
