@@ -8,12 +8,15 @@
 //! - **wasm32**: `@team-charls/charls-wasm` (npm) via `wasm-bindgen`. [`init`] must
 //!   be awaited once before the first decode. Encode is unsupported.
 //!
+//! # Building
+//!
+//! On native targets, `charls-sys` compiles the bundled CharLS sources with CMake,
+//! so CMake and a C++ compiler are required. CharLS does not need to be installed.
+//!
 //! # Cargo features
 //!
-//! - `static`: statically link CharLS (native only).
-//!   If this is not enabled,
-//!   you need to install the CharLS (e.g. `libcharls.so`) into your system
-//!   or add it to your library path (`LD_LIBRARY_PATH`).
+//! - `static`: ask rustc to link CharLS as a static library (native only).
+//! - `vcpkg`: do not build CharLS; find an installed one through vcpkg (native only).
 //!
 //! # Example
 //!
@@ -24,6 +27,7 @@
 //! let data = std::fs::read("test.jls")?;
 //! let mut charls = CharLS::default();
 //! let decoded = charls.decode(&data)?;
+//! // The same instance can decode or encode any number of images.
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 

@@ -37,8 +37,9 @@ use charls::CharLS;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let data = std::fs::read("image.jls")?;
 
-    let info = CharLS::default().get_frame_info(&data)?;
-    let pixels = CharLS::default().decode(&data)?;
+    let mut codec = CharLS::default();
+    let info = codec.get_frame_info(&data)?;
+    let pixels = codec.decode(&data)?;
 
     println!(
         "{}x{}, {} bits, {} component(s), {} bytes",
@@ -105,12 +106,26 @@ fn main() -> Result<(), charls::Error> {
 }
 ```
 
-### One operation per `CharLS` value
+### Reusing a `CharLS` value
 
-On the native backend, a `CharLS` value can do one decode (or one `get_frame_info`) and one encode.
-A second call of the same kind returns `Error::JpegLsError { code: 7 }`
-("Method call is invalid for the current state"). Create a new `CharLS::default()` for each image.
-This also applies to `get_frame_info` followed by `decode`.
+A `CharLS` value can decode, encode and read frame info for any number of images. The interleave
+mode stays set for every later `encode`. `CharLS` is `Send + Sync`.
+
+```rust
+use charls::{CharLS, FrameInfo};
+
+fn main() -> Result<(), charls::Error> {
+    let frame = FrameInfo { width: 2, height: 2, bits_per_sample: 8, component_count: 1 };
+    let mut codec = CharLS::default();
+
+    for pixels in [[0u8, 1, 2, 3], [4, 5, 6, 7]] {
+        let encoded = codec.encode(frame.clone(), 0, &pixels)?;
+        assert_eq!(codec.get_frame_info(&encoded)?, frame);
+        assert_eq!(codec.decode(&encoded)?, pixels);
+    }
+    Ok(())
+}
+```
 
 ### Errors
 
@@ -125,7 +140,7 @@ Invalid JPEG-LS stream: the leading start byte (0xFF) for a JPEG marker was not 
 
 | Feature  | Effect |
 |----------|--------|
-| `static` | Link the CharLS library that CMake builds as a static library. |
+| `static` | Ask rustc to link CharLS as a static library. The default build already produces only a static `libcharls`, so the result usually does not change. |
 | `vcpkg`  | Do not build CharLS. Find an installed CharLS with [vcpkg](https://vcpkg.io) instead (`vcpkg install charls`). |
 
 ## WebAssembly (`wasm32`)
